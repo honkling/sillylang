@@ -1,0 +1,34 @@
+function lexer_new(input: string):
+    set {-lexer::input} to {_input}
+    set {-lexer::index} to 1
+    delete {-lexer::tokens::*}
+    token_init()
+
+function lexer_lex() :: boolean:
+    while {-lexer::index} <= length of {-lexer::input}:
+        lexer_getNextToken() is false
+        broadcast "Unexpected token at index %{-lexer::index}%"
+        return false
+
+    return true
+
+function lexer_getNextToken() :: boolean:
+    set {_} to {-lexer::input}
+    set {_i} to {-lexer::index}
+    set {_restCode} to subtext of {_} from {_i} to length of {_}
+
+    loop reversed indices of {tokenType::*}:
+        continue if token_matches(loop-value, {_restCode}) is false
+
+        set {_match} to token_match(loop-value, {_restCode})
+        set {_index} to size of indices of {-lexer::tokens::*} + 1
+
+        if loop-value isn't "whitespace":
+            set {-lexer::tokens::%{_index}%::raw} to {_match}
+            set {-lexer::tokens::%{_index}%::start} to {_i}
+            set {-lexer::tokens::%{_index}%::type} to loop-value
+
+        add length of {_match} to {-lexer::index}
+        return true
+
+    return false

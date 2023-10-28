@@ -1,0 +1,38 @@
+function stream_new():
+    set {-stream::index} to 1
+
+function stream_peek() :: int:
+    return {-stream::index}
+
+function stream_consume() :: int:
+    set {_} to {-stream::index}
+    add 1 to {-stream::index}
+    return {_}
+
+function stream_expect(i: int, id: strings) :: boolean:
+    set {_} to stream_type({_i})
+
+    if {_id::*} doesn't contain {_}:
+        stream_throw("expected %join {_id::*} with ", "%, found %{_}%")
+        return false
+
+    return true
+
+function stream_throw(message: string):
+    broadcast "&c(stream) %{_message}%"
+
+function stream_type(i: int) :: string:
+    return {-lexer::tokens::%{_i}%::type}
+
+function stream_raw(i: int) :: string:
+    return {-lexer::tokens::%{_i}%::raw}
+
+function stream_start(i: int) :: int:
+    return {-lexer::tokens::%{_i}%::start}
+
+function stream_expressToken(i: int) :: string:
+    set {_t} to stream_type({_i})
+    set {_r} to stream_raw({_i})
+    replace all """" in {_r} with "\"""
+    set {_s} to stream_start({_i})
+    return "Token(type = %{_t}%, raw = ""%{_r}%"", start = %{_s}%)"

@@ -1,0 +1,31 @@
+command silly:
+    trigger:
+        set {_} to now
+
+        lexer_new("function test(a, b, c) { a = 1 println(""test"") println(a) }")
+        stop if lexer_lex() is false
+
+        set {_timer} to difference between now and {_}
+        set {_size} to size of indices of {-lexer::tokens::*}
+        send "Finished lexing in %{_timer}.getMilliSeconds()%ms (%{_size}% token%"s" if {_size} isn't 1, else ""%)%nl%"
+        set {_i} to 1
+        loop indices of {-lexer::tokens::*}:
+            if {_i} > 8:
+                set {_rest} to {_size} - {_i}
+                send "... %{_rest}% more"
+                stop loop
+
+            send "Token(type=%{-lexer::tokens::%loop-value%::type}%, raw=""%{-lexer::tokens::%loop-value%::raw}%"", start=%{-lexer::tokens::%loop-value%::start}%)"
+            add 1 to {_i}
+
+        send ""
+        set {_} to now
+
+        parser_new()
+        parser_parseTopLevel()
+
+        set {_timer} to difference between now and {_}
+        set {_size} to size of indices of {-parser::statements::*}
+        send "Finished parsing in %{_timer}.getMilliSeconds()%ms (%{_size}% statement%"s" if {_size} isn't 1, else ""%)%nl%"
+        loop indices of {-parser::statements::*}:
+            send parser_expressStatement("-parser::statements::%loop-value%")

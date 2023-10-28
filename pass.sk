@@ -1,0 +1,5 @@
+function accept(in: string):
+    set {_type} to {%{_in}%::type}
+
+    if {_type} is "functionDeclaration":
+        

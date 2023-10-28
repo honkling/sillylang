@@ -1,0 +1,171 @@
+on script load:
+    locally suppress starting expression warning
+
+function parser_new():
+    delete {-parser::statements::*}
+    stream_new()
+
+function parser_parseTopLevel():
+    set {_} to stream_type(stream_peek())
+
+    if {_} is "keywordfunction":
+        parser_parseFunctionDeclaration("-parser::statements::0")
+
+function parser_parseFunctionDeclaration(out: string) :: boolean:
+    stop if stream_expect(stream_consume(), "keywordfunction") is false
+    stop if stream_expect(stream_peek(), "identifier") is false
+
+    set {_name} to stream_raw(stream_consume())
+
+    stop if stream_expect(stream_consume(), "symbolopenparen") is false
+
+    while stream_type(stream_peek()) isn't "symbolcloseparen":
+        stop if stream_expect(stream_peek(), "identifier") is false
+
+        add stream_raw(stream_consume()) to {_parameters::*}
+
+        if stream_type(stream_peek()) is "symbolcomma":
+            stop if stream_expect(stream_consume(), "symbolcomma") is false
+            stop if stream_expect(stream_peek(), "identifier") is false
+
+    stop if stream_expect(stream_consume(), "symbolcloseparen") is false
+
+    return false if parser_parseBlock("%{_out}%::block") is false
+
+    set {%{_out}%::type} to "functionDeclaration"
+    set {%{_out}%::name} to {_name}
+    set {%{_out}%::parameters::*} to {_parameters::*}
+
+    return true
+
+function parser_parseBlock(out: string) :: boolean:
+    stop if stream_expect(stream_consume(), "symbolopenbrace") is false
+    
+    while stream_type(stream_peek()) isn't "symbolclosebrace":
+        set {_i} to size of indices of {%{_out}%::*} + 1
+        return false if parser_parseStatement("%{_out}%::%{_i}%") is false
+
+    stop if stream_expect(stream_consume(), "symbolclosebrace") is false
+    return true
+
+function parser_parseVariableAssignment(out: string) :: boolean:
+    stop if stream_expect(stream_peek(), "identifier") is false
+
+    set {_name} to stream_raw(stream_consume())
+
+    stop if stream_expect(stream_consume(), "symbolequals") is false
+
+    set {%{_out}%::name} to {_name}
+    set {%{_out}%::type} to "variableAssignment"
+    return false if parser_parseValue({_out}) is false
+
+function parser_parseValue(out: string) :: boolean:
+    set {_} to stream_consume()
+    set {_t} to stream_type({_})
+    set {_r} to stream_raw({_})
+
+    if {_t} is "literalstring":
+        set {%{_out}%::valueType} to "string"
+        replace "\""" in {_r} with """"
+        set {%{_out}%::value} to subtext of {_r} from 2 to (length of {_r}) - 1
+    else if {_t} is "literalinteger":
+        set {%{_out}%::valueType} to "integer"
+        set {%{_out}%::value} to {_r} parsed as int
+    else if {_t} is "literalnumber":
+        set {%{_out}%::valueType} to "number"
+        set {%{_out}%::value} to {_r} parsed as num
+    else if {_t} is "literalboolean":
+        set {%{_out}%::valueType} to "boolean"
+        set {%{_out}%::value} to true if {_r} is "true" else false
+    else:
+        parser_throw("this isn't a real value yo (%stream_expressToken({_})%)")
+        return false
+
+    return true
+
+function parser_parseStatement(out: string) :: boolean:
+    set {_} to stream_type(stream_peek())
+
+    if {_} is "keywordfunction":
+        parser_parseFunctionDeclaration({_out})
+    else if {_} is "identifier":
+        set {_t} to stream_type(stream_peek() + 1)
+
+        if {_t} is "symbolEquals":
+            parser_parseVariableAssignment({_out})
+        else if {_t} is "symbolopenparen":
+            parser_parseFunctionCall({_out})
+        else:
+            parser_throw("couldn't identify statement (identifier %parser_expressStatement({_})%)")
+            return false
+    else:
+        parser_throw("couldn't identify statement (root %parser_expressStatement({_})%)")
+        return false
+
+    return true
+
+function parser_parseFunctionCall(out: string) :: boolean:
+    stop if stream_expect(stream_peek(), "identifier") is false
+
+    set {%{_out}%::type} to "functionCall"
+    set {%{_out}%::name} to stream_raw(stream_consume())
+
+    stop if stream_expect(stream_consume(), "symbolopenparen") is false
+
+    while stream_type(stream_peek()) isn't "symbolcloseparen":
+        set {_i} to size of indices of {_parameters::*} + 1
+
+        if stream_type(stream_peek()) is "identifier":
+            set {%{_out}%::parameters::%{_i}%::type} to "variable"
+            set {%{_out}%::parameters::%{_i}%::value} to stream_raw(stream_consume())
+        else:
+            return false if parser_parseValue("%{_out}%::parameters::%{_i}%") is false
+
+            if stream_type(stream_peek()) isn't "symbolcloseparen":
+                stop if stream_expect(stream_consume(), "symbolcomma") is false
+                stop if stream_expect(stream_peek(), ("identifier", "literalstring", "literalinteger", "literalnumber", "literalboolean")) is false
+
+    stop if stream_expect(stream_consume(), "symbolcloseparen") is false
+
+function parser_expressBlock(in: string) :: string:
+    loop indices of {%{_in}%::*}:
+        add parser_expressStatement("%{_in}%::%loop-value%") to {_statements::*}
+
+    return "Block(statements=[%(join {_statements::*} with ", ") ? ""%])"
+
+function parser_expressStatement(in: string) :: string:
+    set {_type} to {%{_in}%::type}
+
+    if {_type} is "functionDeclaration":
+        set {_name} to {%{_in}%::name}
+        set {_parameters} to (join {%{_in}%::parameters::*} with ", ") ? ""
+        set {_block} to parser_expressBlock("%{_in}%::block")
+        return "FunctionDeclarationStatement(name=%{_name}%, parameters=[%{_parameters}%], block=%{_block}%)"
+    else if {_type} is "variableAssignment":
+        set {_name} to {%{_in}%::name}
+        set {_type} to {%{_in}%::valueType}
+        return "VariableAssignmentStatement(name=%{_name}%, type=%{_type}%, value=%parser_expressValue({_in})%)"
+    else if {_type} is "functionCall":
+        set {_name} to {%{_in}%::name}
+        set {_parameters} to parser_expressValues("%{_in}%::parameters")
+        return "FunctionCallStatement(name=%{_name}%, parameters=[%{_parameters}%])"
+    else:
+        return "Statement(type=%{_type}%)"
+
+function parser_expressValue(in: string) :: string:
+    set {_t} to {%{_in}%::valueType}
+    set {_v} to {%{_in}%::value}
+
+    if {_t} is "string":
+        return """%{_v}%"""
+
+    return "%{_v}%"
+
+function parser_expressValues(in: string) :: string:
+    loop indices of {%{_in}%::*}:
+        add parser_expressValue("%{_in}%::%loop-value%") to {_v::*}
+
+    return (join {_v::*} with ", ") ? ""
+
+function parser_throw(message: string):
+    broadcast "&c(parser) %{_message}%"

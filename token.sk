@@ -1,0 +1,38 @@
+import:
+    java.util.regex.Pattern
+    java.util.regex.Matcher
+
+function token_init():
+    token_register("whitespace", "\s+")
+
+    token_register("keywordFunction", "function")
+
+    token_register("literalString", """([^""]|\"")*""")
+    token_register("literalInteger", "\d+")
+    token_register("literalNumber", "\d+\.\d+")
+    token_register("literalBoolean", "(true|false)")
+
+    token_register("symbolOpenParen", "\(")
+    token_register("symbolCloseParen", "\)")
+    token_register("symbolOpenBrace", "\{")
+    token_register("symbolCloseBrace", "\}")
+    token_register("symbolComma", ",")
+    token_register("symbolEquals", "=")
+
+    token_register("identifier", "\w+")
+
+function token_register(id: string, regex: string):
+    set {tokenType::%{_id}%} to Pattern.compile("^%{_regex}%", Pattern.MULTILINE)
+
+function token_matches(id: string, input: string) :: boolean:
+    set {_p} to Pattern.compile("^%{tokenType::%{_id}%}%", Pattern.MULTILINE)
+    set {_m} to {_p}.matcher({_input})
+
+    return {_m}.find()
+
+function token_match(id: string, input: string) :: string:
+    set {_p} to Pattern.compile("^%{tokenType::%{_id}%}%", Pattern.MULTILINE)
+    set {_m} to {_p}.matcher({_input})
+
+    {_m}.find()
+    return "%{_m}.group(0)%"
